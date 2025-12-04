@@ -1,90 +1,58 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 import hashlib
-import os
 
-# Database setup
-def init_database():
-    """Initialize the SQLite database with tables and sample data"""
-    # Use a writable path in Streamlit Cloud
-    db_path = 'leave_management.db'
+# Initialize session state data
+def init_data():
+    """Initialize demo data in session state"""
+    if 'employees' not in st.session_state:
+        st.session_state.employees = {
+            1001: {'emp_id': 1001, 'name': 'John Doe', 'email': 'john.doe@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'Engineering', 'role': 'Employee', 'total_leaves': 20, 'used_leaves': 5},
+            1002: {'emp_id': 1002, 'name': 'Jane Smith', 'email': 'jane.smith@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'Engineering', 'role': 'Manager', 'total_leaves': 20, 'used_leaves': 3},
+            1003: {'emp_id': 1003, 'name': 'Bob Johnson', 'email': 'bob.johnson@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'HR', 'role': 'Employee', 'total_leaves': 20, 'used_leaves': 8},
+            1004: {'emp_id': 1004, 'name': 'Alice Williams', 'email': 'alice.williams@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'Marketing', 'role': 'Employee', 'total_leaves': 20, 'used_leaves': 2},
+            1005: {'emp_id': 1005, 'name': 'Charlie Brown', 'email': 'charlie.brown@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'Sales', 'role': 'Manager', 'total_leaves': 20, 'used_leaves': 4},
+            1006: {'emp_id': 1006, 'name': 'Diana Prince', 'email': 'diana.prince@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'Engineering', 'role': 'Employee', 'total_leaves': 20, 'used_leaves': 6},
+            1007: {'emp_id': 1007, 'name': 'Eve Davis', 'email': 'eve.davis@acme.com', 
+                   'password': hashlib.sha256('password123'.encode()).hexdigest(), 
+                   'department': 'HR', 'role': 'Manager', 'total_leaves': 20, 'used_leaves': 1},
+        }
     
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Create employees table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS employees (
-            emp_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            department TEXT NOT NULL,
-            role TEXT NOT NULL,
-            total_leaves INTEGER DEFAULT 20,
-            used_leaves INTEGER DEFAULT 0
-        )
-    ''')
-    
-    # Create leave_requests table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS leave_requests (
-            request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            emp_id INTEGER NOT NULL,
-            leave_type TEXT NOT NULL,
-            start_date DATE NOT NULL,
-            end_date DATE NOT NULL,
-            days INTEGER NOT NULL,
-            reason TEXT,
-            status TEXT DEFAULT 'Pending',
-            applied_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            approved_by INTEGER,
-            approved_date TIMESTAMP,
-            FOREIGN KEY (emp_id) REFERENCES employees(emp_id)
-        )
-    ''')
-    
-    # CRITICAL FIX: Always ensure demo users exist
-    # This handles the case where database gets reset on Streamlit Cloud
-    demo_employees = [
-        (1001, 'John Doe', 'john.doe@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 5),
-        (1002, 'Jane Smith', 'jane.smith@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Manager', 20, 3),
-        (1003, 'Bob Johnson', 'bob.johnson@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Employee', 20, 8),
-        (1004, 'Alice Williams', 'alice.williams@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Marketing', 'Employee', 20, 2),
-        (1005, 'Charlie Brown', 'charlie.brown@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Sales', 'Manager', 20, 4),
-        (1006, 'Diana Prince', 'diana.prince@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 6),
-        (1007, 'Eve Davis', 'eve.davis@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Manager', 20, 1),
-    ]
-    
-    # Insert or replace to ensure users always exist
-    for emp in demo_employees:
-        cursor.execute('''
-            INSERT OR REPLACE INTO employees (emp_id, name, email, password, department, role, total_leaves, used_leaves)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', emp)
-    
-    # Check if sample leave requests exist
-    cursor.execute('SELECT COUNT(*) FROM leave_requests')
-    if cursor.fetchone()[0] == 0:
-        # Insert sample leave requests
-        sample_leaves = [
-            (1001, 'Sick Leave', '2025-11-15', '2025-11-17', 3, 'Medical appointment', 'Approved', 1002),
-            (1001, 'Casual Leave', '2025-12-20', '2025-12-22', 2, 'Personal work', 'Pending', None),
-            (1003, 'Annual Leave', '2025-11-01', '2025-11-08', 8, 'Vacation', 'Approved', 1007),
-            (1004, 'Casual Leave', '2025-11-25', '2025-11-26', 2, 'Family function', 'Approved', 1002),
-            (1006, 'Sick Leave', '2025-12-01', '2025-12-03', 3, 'Flu', 'Rejected', 1002),
-            (1006, 'Casual Leave', '2025-12-15', '2025-12-17', 3, 'Personal work', 'Pending', None),
+    if 'leave_requests' not in st.session_state:
+        st.session_state.leave_requests = [
+            {'request_id': 1, 'emp_id': 1001, 'leave_type': 'Sick Leave', 'start_date': '2025-11-15', 
+             'end_date': '2025-11-17', 'days': 3, 'reason': 'Medical appointment', 
+             'status': 'Approved', 'applied_date': '2025-11-10 09:30:00', 'approved_by': 1002},
+            {'request_id': 2, 'emp_id': 1001, 'leave_type': 'Casual Leave', 'start_date': '2025-12-20', 
+             'end_date': '2025-12-22', 'days': 2, 'reason': 'Personal work', 
+             'status': 'Pending', 'applied_date': '2025-12-15 14:20:00', 'approved_by': None},
+            {'request_id': 3, 'emp_id': 1003, 'leave_type': 'Annual Leave', 'start_date': '2025-11-01', 
+             'end_date': '2025-11-08', 'days': 8, 'reason': 'Vacation', 
+             'status': 'Approved', 'applied_date': '2025-10-25 11:00:00', 'approved_by': 1007},
+            {'request_id': 4, 'emp_id': 1004, 'leave_type': 'Casual Leave', 'start_date': '2025-11-25', 
+             'end_date': '2025-11-26', 'days': 2, 'reason': 'Family function', 
+             'status': 'Approved', 'applied_date': '2025-11-20 16:45:00', 'approved_by': 1002},
+            {'request_id': 5, 'emp_id': 1006, 'leave_type': 'Sick Leave', 'start_date': '2025-12-01', 
+             'end_date': '2025-12-03', 'days': 3, 'reason': 'Flu', 
+             'status': 'Rejected', 'applied_date': '2025-11-28 08:15:00', 'approved_by': 1002},
+            {'request_id': 6, 'emp_id': 1006, 'leave_type': 'Casual Leave', 'start_date': '2025-12-15', 
+             'end_date': '2025-12-17', 'days': 3, 'reason': 'Personal work', 
+             'status': 'Pending', 'applied_date': '2025-12-10 10:30:00', 'approved_by': None},
         ]
-        
-        cursor.executemany('''
-            INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days, reason, status, approved_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', sample_leaves)
-    
-    conn.commit()
-    conn.close()
+        st.session_state.next_request_id = 7
 
 # Authentication functions
 def hash_password(password):
@@ -93,128 +61,79 @@ def hash_password(password):
 
 def authenticate_user(email, password):
     """Authenticate user credentials"""
-    try:
-        conn = sqlite3.connect('leave_management.db')
-        cursor = conn.cursor()
-        
-        hashed_password = hash_password(password)
-        cursor.execute('''
-            SELECT emp_id, name, email, department, role, total_leaves, used_leaves
-            FROM employees
-            WHERE email = ? AND password = ?
-        ''', (email, hashed_password))
-        
-        user = cursor.fetchone()
-        conn.close()
-        
-        if user:
-            return {
-                'emp_id': user[0],
-                'name': user[1],
-                'email': user[2],
-                'department': user[3],
-                'role': user[4],
-                'total_leaves': user[5],
-                'used_leaves': user[6]
-            }
-        return None
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return None
+    hashed_password = hash_password(password)
+    for emp_id, emp in st.session_state.employees.items():
+        if emp['email'] == email and emp['password'] == hashed_password:
+            return emp.copy()
+    return None
 
 # Leave management functions
 def apply_leave(emp_id, leave_type, start_date, end_date, reason):
     """Apply for a new leave"""
-    conn = sqlite3.connect('leave_management.db')
-    cursor = conn.cursor()
-    
-    # Calculate number of days
     days = (end_date - start_date).days + 1
     
-    cursor.execute('''
-        INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days, reason, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'Pending')
-    ''', (emp_id, leave_type, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), days, reason))
+    new_request = {
+        'request_id': st.session_state.next_request_id,
+        'emp_id': emp_id,
+        'leave_type': leave_type,
+        'start_date': start_date.strftime('%Y-%m-%d'),
+        'end_date': end_date.strftime('%Y-%m-%d'),
+        'days': days,
+        'reason': reason,
+        'status': 'Pending',
+        'applied_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'approved_by': None
+    }
     
-    conn.commit()
-    conn.close()
+    st.session_state.leave_requests.append(new_request)
+    st.session_state.next_request_id += 1
     return True
 
 def get_employee_leaves(emp_id):
     """Get all leave requests for an employee"""
-    conn = sqlite3.connect('leave_management.db')
-    query = '''
-        SELECT request_id, leave_type, start_date, end_date, days, reason, status, applied_date
-        FROM leave_requests
-        WHERE emp_id = ?
-        ORDER BY applied_date DESC
-    '''
-    df = pd.read_sql_query(query, conn, params=(emp_id,))
-    conn.close()
-    return df
+    leaves = [req for req in st.session_state.leave_requests if req['emp_id'] == emp_id]
+    return pd.DataFrame(leaves) if leaves else pd.DataFrame()
 
 def get_all_leave_requests():
     """Get all leave requests (for managers)"""
-    conn = sqlite3.connect('leave_management.db')
-    query = '''
-        SELECT lr.request_id, e.name, e.department, lr.leave_type, 
-               lr.start_date, lr.end_date, lr.days, lr.reason, lr.status, lr.applied_date
-        FROM leave_requests lr
-        JOIN employees e ON lr.emp_id = e.emp_id
-        ORDER BY lr.applied_date DESC
-    '''
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+    data = []
+    for req in st.session_state.leave_requests:
+        emp = st.session_state.employees[req['emp_id']]
+        data.append({
+            'request_id': req['request_id'],
+            'name': emp['name'],
+            'department': emp['department'],
+            'leave_type': req['leave_type'],
+            'start_date': req['start_date'],
+            'end_date': req['end_date'],
+            'days': req['days'],
+            'reason': req['reason'],
+            'status': req['status'],
+            'applied_date': req['applied_date']
+        })
+    return pd.DataFrame(data) if data else pd.DataFrame()
 
 def update_leave_status(request_id, status, manager_id):
     """Update leave request status"""
-    conn = sqlite3.connect('leave_management.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE leave_requests
-        SET status = ?, approved_by = ?, approved_date = CURRENT_TIMESTAMP
-        WHERE request_id = ?
-    ''', (status, manager_id, request_id))
-    
-    # If approved, update employee's used leaves
-    if status == 'Approved':
-        cursor.execute('''
-            UPDATE employees
-            SET used_leaves = used_leaves + (
-                SELECT days FROM leave_requests WHERE request_id = ?
-            )
-            WHERE emp_id = (
-                SELECT emp_id FROM leave_requests WHERE request_id = ?
-            )
-        ''', (request_id, request_id))
-    
-    conn.commit()
-    conn.close()
+    for req in st.session_state.leave_requests:
+        if req['request_id'] == request_id:
+            req['status'] = status
+            req['approved_by'] = manager_id
+            
+            # If approved, update employee's used leaves
+            if status == 'Approved':
+                emp_id = req['emp_id']
+                st.session_state.employees[emp_id]['used_leaves'] += req['days']
+            break
 
 def get_leave_statistics(emp_id):
     """Get leave statistics for an employee"""
-    conn = sqlite3.connect('leave_management.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT total_leaves, used_leaves
-        FROM employees
-        WHERE emp_id = ?
-    ''', (emp_id,))
-    
-    result = cursor.fetchone()
-    conn.close()
-    
-    if result:
-        total, used = result
-        return {
-            'total': total,
-            'used': used,
-            'available': total - used
-        }
-    return None
+    emp = st.session_state.employees[emp_id]
+    return {
+        'total': emp['total_leaves'],
+        'used': emp['used_leaves'],
+        'available': emp['total_leaves'] - emp['used_leaves']
+    }
 
 # Streamlit UI
 def main():
@@ -224,8 +143,8 @@ def main():
         layout="wide"
     )
     
-    # Initialize database on every run (handles Streamlit Cloud resets)
-    init_database()
+    # Initialize data
+    init_data()
     
     # Custom CSS
     st.markdown("""
@@ -252,27 +171,6 @@ def main():
         .stat-label {
             font-size: 0.9rem;
             opacity: 0.9;
-        }
-        .status-pending {
-            background-color: #ffc107;
-            color: black;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
-            font-weight: bold;
-        }
-        .status-approved {
-            background-color: #28a745;
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
-            font-weight: bold;
-        }
-        .status-rejected {
-            background-color: #dc3545;
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
-            font-weight: bold;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -373,14 +271,11 @@ def main():
             leaves_df = get_employee_leaves(user['emp_id'])
             
             if not leaves_df.empty:
-                # Format the dataframe for display
                 display_df = leaves_df.copy()
-                display_df['start_date'] = pd.to_datetime(display_df['start_date']).dt.strftime('%Y-%m-%d')
-                display_df['end_date'] = pd.to_datetime(display_df['end_date']).dt.strftime('%Y-%m-%d')
-                display_df['applied_date'] = pd.to_datetime(display_df['applied_date']).dt.strftime('%Y-%m-%d %H:%M')
+                display_df = display_df.sort_values('applied_date', ascending=False)
                 
                 st.dataframe(
-                    display_df,
+                    display_df[['request_id', 'leave_type', 'start_date', 'end_date', 'days', 'reason', 'status']],
                     column_config={
                         "request_id": "Request ID",
                         "leave_type": "Leave Type",
@@ -388,10 +283,7 @@ def main():
                         "end_date": "End Date",
                         "days": "Days",
                         "reason": "Reason",
-                        "status": st.column_config.TextColumn(
-                            "Status",
-                        ),
-                        "applied_date": "Applied On"
+                        "status": "Status"
                     },
                     hide_index=True,
                     use_container_width=True
@@ -462,14 +354,10 @@ def main():
                     (leaves_df['leave_type'].isin(leave_type_filter))
                 ]
                 
-                # Format the dataframe
-                display_df = filtered_df.copy()
-                display_df['start_date'] = pd.to_datetime(display_df['start_date']).dt.strftime('%Y-%m-%d')
-                display_df['end_date'] = pd.to_datetime(display_df['end_date']).dt.strftime('%Y-%m-%d')
-                display_df['applied_date'] = pd.to_datetime(display_df['applied_date']).dt.strftime('%Y-%m-%d %H:%M')
+                filtered_df = filtered_df.sort_values('applied_date', ascending=False)
                 
                 st.dataframe(
-                    display_df,
+                    filtered_df[['request_id', 'leave_type', 'start_date', 'end_date', 'days', 'reason', 'status', 'applied_date']],
                     column_config={
                         "request_id": "Request ID",
                         "leave_type": "Leave Type",
