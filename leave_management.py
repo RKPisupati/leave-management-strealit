@@ -42,6 +42,20 @@ def init_database():
         )
     ''')
     
+    # Ensure schema migrations for existing databases: add missing columns if needed
+    cursor.execute("PRAGMA table_info(employees)")
+    existing_cols = [row[1] for row in cursor.fetchall()]
+
+    # Add `role` column if it doesn't exist (older DBs may lack it)
+    if 'role' not in existing_cols:
+        cursor.execute("ALTER TABLE employees ADD COLUMN role TEXT NOT NULL DEFAULT 'Employee'")
+
+    # Add `total_leaves` and `used_leaves` if missing
+    if 'total_leaves' not in existing_cols:
+        cursor.execute("ALTER TABLE employees ADD COLUMN total_leaves INTEGER DEFAULT 20")
+    if 'used_leaves' not in existing_cols:
+        cursor.execute("ALTER TABLE employees ADD COLUMN used_leaves INTEGER DEFAULT 0")
+    
     # Check if sample data already exists
     cursor.execute('SELECT COUNT(*) FROM employees')
     if cursor.fetchone()[0] == 0:
