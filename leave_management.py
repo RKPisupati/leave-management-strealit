@@ -3,11 +3,15 @@ import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 import hashlib
+import os
 
 # Database setup
 def init_database():
     """Initialize the SQLite database with tables and sample data"""
-    conn = sqlite3.connect('leave_management.db')
+    # Use a writable path in Streamlit Cloud
+    db_path = 'leave_management.db'
+    
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # Create employees table
@@ -42,39 +46,28 @@ def init_database():
         )
     ''')
     
-    # Ensure schema migrations for existing databases: add missing columns if needed
-    cursor.execute("PRAGMA table_info(employees)")
-    existing_cols = [row[1] for row in cursor.fetchall()]
-
-    # Add `role` column if it doesn't exist (older DBs may lack it)
-    if 'role' not in existing_cols:
-        cursor.execute("ALTER TABLE employees ADD COLUMN role TEXT NOT NULL DEFAULT 'Employee'")
-
-    # Add `total_leaves` and `used_leaves` if missing
-    if 'total_leaves' not in existing_cols:
-        cursor.execute("ALTER TABLE employees ADD COLUMN total_leaves INTEGER DEFAULT 20")
-    if 'used_leaves' not in existing_cols:
-        cursor.execute("ALTER TABLE employees ADD COLUMN used_leaves INTEGER DEFAULT 0")
+    # CRITICAL FIX: Always ensure demo users exist
+    # This handles the case where database gets reset on Streamlit Cloud
+    demo_employees = [
+        (1001, 'John Doe', 'john.doe@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 5),
+        (1002, 'Jane Smith', 'jane.smith@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Manager', 20, 3),
+        (1003, 'Bob Johnson', 'bob.johnson@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Employee', 20, 8),
+        (1004, 'Alice Williams', 'alice.williams@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Marketing', 'Employee', 20, 2),
+        (1005, 'Charlie Brown', 'charlie.brown@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Sales', 'Manager', 20, 4),
+        (1006, 'Diana Prince', 'diana.prince@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 6),
+        (1007, 'Eve Davis', 'eve.davis@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Manager', 20, 1),
+    ]
     
-    # Check if sample data already exists
-    cursor.execute('SELECT COUNT(*) FROM employees')
-    if cursor.fetchone()[0] == 0:
-        # Insert sample employees (password is 'password123' hashed)
-        sample_employees = [
-            (1001, 'John Doe', 'john.doe@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 5),
-            (1002, 'Jane Smith', 'jane.smith@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Manager', 20, 3),
-            (1003, 'Bob Johnson', 'bob.johnson@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Employee', 20, 8),
-            (1004, 'Alice Williams', 'alice.williams@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Marketing', 'Employee', 20, 2),
-            (1005, 'Charlie Brown', 'charlie.brown@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Sales', 'Manager', 20, 4),
-            (1006, 'Diana Prince', 'diana.prince@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Engineering', 'Employee', 20, 6),
-            (1007, 'Eve Davis', 'eve.davis@acme.com', hashlib.sha256('password123'.encode()).hexdigest(), 'HR', 'Manager', 20, 1),
-        ]
-        
-        cursor.executemany('''
-            INSERT INTO employees (emp_id, name, email, password, department, role, total_leaves, used_leaves)
+    # Insert or replace to ensure users always exist
+    for emp in demo_employees:
+        cursor.execute('''
+            INSERT OR REPLACE INTO employees (emp_id, name, email, password, department, role, total_leaves, used_leaves)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', sample_employees)
-        
+        ''', emp)
+    
+    # Check if sample leave requests exist
+    cursor.execute('SELECT COUNT(*) FROM leave_requests')
+    if cursor.fetchone()[0] == 0:
         # Insert sample leave requests
         sample_leaves = [
             (1001, 'Sick Leave', '2025-11-15', '2025-11-17', 3, 'Medical appointment', 'Approved', 1002),
@@ -89,9 +82,8 @@ def init_database():
             INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days, reason, status, approved_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', sample_leaves)
-        
-        conn.commit()
     
+    conn.commit()
     conn.close()
 
 # Authentication functions
@@ -101,30 +93,34 @@ def hash_password(password):
 
 def authenticate_user(email, password):
     """Authenticate user credentials"""
-    conn = sqlite3.connect('leave_management.db')
-    cursor = conn.cursor()
-    
-    hashed_password = hash_password(password)
-    cursor.execute('''
-        SELECT emp_id, name, email, department, role, total_leaves, used_leaves
-        FROM employees
-        WHERE email = ? AND password = ?
-    ''', (email, hashed_password))
-    
-    user = cursor.fetchone()
-    conn.close()
-    
-    if user:
-        return {
-            'emp_id': user[0],
-            'name': user[1],
-            'email': user[2],
-            'department': user[3],
-            'role': user[4],
-            'total_leaves': user[5],
-            'used_leaves': user[6]
-        }
-    return None
+    try:
+        conn = sqlite3.connect('leave_management.db')
+        cursor = conn.cursor()
+        
+        hashed_password = hash_password(password)
+        cursor.execute('''
+            SELECT emp_id, name, email, department, role, total_leaves, used_leaves
+            FROM employees
+            WHERE email = ? AND password = ?
+        ''', (email, hashed_password))
+        
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            return {
+                'emp_id': user[0],
+                'name': user[1],
+                'email': user[2],
+                'department': user[3],
+                'role': user[4],
+                'total_leaves': user[5],
+                'used_leaves': user[6]
+            }
+        return None
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return None
 
 # Leave management functions
 def apply_leave(emp_id, leave_type, start_date, end_date, reason):
@@ -228,7 +224,7 @@ def main():
         layout="wide"
     )
     
-    # Initialize database
+    # Initialize database on every run (handles Streamlit Cloud resets)
     init_database()
     
     # Custom CSS
@@ -301,13 +297,16 @@ def main():
                 submit = st.form_submit_button("Login", use_container_width=True)
                 
                 if submit:
-                    user = authenticate_user(email, password)
-                    if user:
-                        st.session_state.logged_in = True
-                        st.session_state.user = user
-                        st.rerun()
+                    if email and password:
+                        user = authenticate_user(email, password)
+                        if user:
+                            st.session_state.logged_in = True
+                            st.session_state.user = user
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid credentials. Please try again.")
                     else:
-                        st.error("❌ Invalid credentials. Please try again.")
+                        st.error("❌ Please enter both email and password.")
             
             st.info("💡 **Demo Credentials:**\n\n**Employee:** john.doe@acme.com / password123\n\n**Manager:** jane.smith@acme.com / password123")
     
